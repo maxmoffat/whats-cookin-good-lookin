@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { useState, useRef, useEffect } from "react";
+import WcglLogo from "@/components/WcglLogo";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useAddRecipeModal } from "@/components/AddRecipeModal";
@@ -33,7 +33,7 @@ export default function Nav({ userEmail }: { userEmail: string }) {
   return (
     <header className="bg-[#f8f0eb] px-6 sm:px-8 lg:px-[120px] h-[120px] flex items-center justify-between">
       <Link href="/recipes" className="flex items-center gap-3">
-        <Image src="/icons/wcgl-logo.svg" alt="WCGL logo" width={40} height={40} />
+        <WcglLogo />
         <span className="hidden lg:block font-[family-name:var(--font-gloria)] text-[22px] text-[#3e260f] leading-tight">
           What&apos;s Cookin&apos;, Good Lookin&apos;?
         </span>

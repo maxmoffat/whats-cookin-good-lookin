@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import WcglLogo from "@/components/WcglLogo";
 import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
@@ -34,7 +35,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-3 mb-3">
-            <img src="/icons/wcgl-logo.svg" alt="WCGL logo" width={40} height={40} />
+            <WcglLogo />
             <span className="font-[family-name:var(--font-gloria)] text-[22px] text-[#3e260f] leading-tight">
               What&apos;s Cookin&apos;, Good Lookin&apos;?
             </span>
