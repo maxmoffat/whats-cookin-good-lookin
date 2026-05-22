@@ -94,6 +94,8 @@ export default function RecipesClient({ recipes }: { recipes: any[] }) {
       )
         return false;
 
+      if (appliedFilters.favoritesOnly && !r.is_favorite) return false;
+
       return true;
     });
   }, [recipes, q, appliedFilters]);
@@ -175,6 +177,14 @@ export default function RecipesClient({ recipes }: { recipes: any[] }) {
                 label={`Serves ${appliedFilters.servesMin}+`}
                 onRemove={() =>
                   setAppliedFilters((f) => ({ ...f, servesMin: 1 }))
+                }
+              />
+            )}
+            {appliedFilters.favoritesOnly && (
+              <FilterChip
+                label="Favorites Only"
+                onRemove={() =>
+                  setAppliedFilters((f) => ({ ...f, favoritesOnly: false }))
                 }
               />
             )}

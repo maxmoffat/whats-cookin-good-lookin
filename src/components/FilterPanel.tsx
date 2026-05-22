@@ -9,6 +9,7 @@ export type Filters = {
   cookTimeMax: number; // minutes, 0 = any
   prepTimeMax: number; // minutes, 0 = any
   servesMin: number;   // 1 = any
+  favoritesOnly: boolean;
 };
 
 export const DEFAULT_FILTERS: Filters = {
@@ -16,6 +17,7 @@ export const DEFAULT_FILTERS: Filters = {
   cookTimeMax: 0,
   prepTimeMax: 0,
   servesMin: 1,
+  favoritesOnly: false,
 };
 
 export function hasActiveFilters(f: Filters): boolean {
@@ -23,7 +25,8 @@ export function hasActiveFilters(f: Filters): boolean {
     f.tags.length > 0 ||
     f.cookTimeMax > 0 ||
     f.prepTimeMax > 0 ||
-    f.servesMin > 1
+    f.servesMin > 1 ||
+    f.favoritesOnly
   );
 }
 
@@ -32,7 +35,8 @@ export function countActiveFilters(f: Filters): number {
     f.tags.length +
     (f.cookTimeMax > 0 ? 1 : 0) +
     (f.prepTimeMax > 0 ? 1 : 0) +
-    (f.servesMin > 1 ? 1 : 0)
+    (f.servesMin > 1 ? 1 : 0) +
+    (f.favoritesOnly ? 1 : 0)
   );
 }
 
@@ -199,6 +203,27 @@ export default function FilterPanel({
 
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto px-6 py-6 space-y-8">
+
+          {/* Favorites Only */}
+          <button
+            onClick={() => setDraft((d) => ({ ...d, favoritesOnly: !d.favoritesOnly }))}
+            className="flex items-center gap-3 w-full text-left"
+          >
+            <span
+              className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${
+                draft.favoritesOnly
+                  ? "bg-[#b9732c] border-[#b9732c]"
+                  : "border-[rgba(62,38,15,0.3)]"
+              }`}
+            >
+              {draft.favoritesOnly && (
+                <svg width="8" height="6" viewBox="0 0 8 6" fill="none">
+                  <path d="M1 3L3 5L7 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              )}
+            </span>
+            <span className="text-sm font-semibold text-[#3e260f]">Favorites Only</span>
+          </button>
 
           {/* Tags */}
           {allTags.length > 0 && (

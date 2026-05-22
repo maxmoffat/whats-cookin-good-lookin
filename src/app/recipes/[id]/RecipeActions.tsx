@@ -5,11 +5,35 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
-export default function RecipeActions({ recipeId }: { recipeId: string }) {
+function HeartOutline() {
+  return (
+    <svg width="16" height="14" viewBox="0 0 16 14" fill="none" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0">
+      <path d="M4.5625 0.509766C5.53977 0.580579 6.60119 1.05801 7.65332 2.09863L8.00488 2.44727L8.35645 2.09863C9.40814 1.05855 10.4678 0.581942 11.4434 0.512695C12.5434 0.434679 13.524 0.876775 14.2441 1.59473C15.6373 2.98388 16.0668 5.41741 14.5156 7.14453L14.3594 7.30957L14.3574 7.31152L8.05273 13.0225C8.02564 13.0468 7.98421 13.0467 7.95703 13.0225L1.65234 7.31152C1.65176 7.31099 1.65038 7.31053 1.64941 7.30957C-0.0958561 5.5643 0.315591 3.0171 1.75684 1.58594C2.47843 0.869426 3.46075 0.429976 4.5625 0.509766Z" stroke="#B9732C"/>
+    </svg>
+  );
+}
+
+function HeartFill() {
+  return (
+    <svg width="16" height="14" viewBox="0 0 16 14" fill="none" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0">
+      <path fillRule="evenodd" clipRule="evenodd" d="M4.59878 0.0106455C5.71934 0.091842 6.88696 0.638082 8.00467 1.7436C9.1221 0.63839 10.2887 0.0931906 11.4082 0.0137997C12.6717 -0.075808 13.7887 0.434856 14.5969 1.24055C16.1857 2.82464 16.6847 5.69106 14.7131 7.66268C14.7065 7.66933 14.6996 7.67582 14.6926 7.68213L8.38827 13.3927C8.17055 13.5898 7.83878 13.5898 7.62107 13.3927L1.31667 7.68213C1.3097 7.67582 1.30289 7.66933 1.29624 7.66268C-0.685657 5.68078 -0.189367 2.81404 1.40473 1.23118C2.21486 0.426754 3.33412 -0.0809849 4.59878 0.0106455Z" fill="white"/>
+    </svg>
+  );
+}
+
+export default function RecipeActions({
+  recipeId,
+  initialIsFavorite,
+}: {
+  recipeId: string;
+  initialIsFavorite: boolean;
+}) {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [isFavorite, setIsFavorite] = useState(initialIsFavorite);
+  const [togglingFav, setTogglingFav] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -30,50 +54,75 @@ export default function RecipeActions({ recipeId }: { recipeId: string }) {
     router.refresh();
   }
 
+  async function handleToggleFavorite() {
+    if (togglingFav) return;
+    setTogglingFav(true);
+    const next = !isFavorite;
+    setIsFavorite(next);
+    setMenuOpen(false);
+    const supabase = createClient();
+    await supabase.from("recipes").update({ is_favorite: next }).eq("id", recipeId);
+    setTogglingFav(false);
+  }
+
   return (
     <>
-      {/* 3-dot menu */}
-      <div className="relative" ref={menuRef}>
+      <div className="flex items-center gap-3">
+        {/* Favorite button */}
         <button
-          onClick={() => setMenuOpen((o) => !o)}
-          className="w-10 h-10 rounded-[6.667px] border border-[#3e260f] flex items-center justify-center hover:bg-[rgba(62,38,15,0.05)] transition-colors"
-          aria-label="Recipe options"
+          onClick={handleToggleFavorite}
+          disabled={togglingFav}
+          className={`flex items-center gap-2 h-10 px-4 rounded-[6.667px] border text-sm transition-colors disabled:opacity-50 whitespace-nowrap ${
+            isFavorite
+              ? "bg-[#b9732c] border-[#b9732c] text-white hover:bg-[#a0621f]"
+              : "bg-transparent border-[#b9732c] text-[#b9732c] hover:bg-[rgba(185,115,44,0.05)]"
+          }`}
         >
-          <svg width="16" height="4" viewBox="0 0 16 4" fill="none">
-            <circle cx="2" cy="2" r="1.5" fill="#3e260f" />
-            <circle cx="8" cy="2" r="1.5" fill="#3e260f" />
-            <circle cx="14" cy="2" r="1.5" fill="#3e260f" />
-          </svg>
+          {isFavorite ? <HeartFill /> : <HeartOutline />}
+          {isFavorite ? "Remove from Favorites" : "Add to Favorites"}
         </button>
 
-        {menuOpen && (
-          <div className="absolute right-0 mt-2 w-36 bg-white rounded-lg border border-[rgba(62,38,15,0.1)] shadow-lg z-20 py-1">
-            <Link
-              href={`/recipes/${recipeId}/edit`}
-              className="block px-4 py-2 text-sm text-[#3e260f] hover:bg-[#f8f0eb] transition-colors"
-              onClick={() => setMenuOpen(false)}
-            >
-              Edit
-            </Link>
-            <button
-              onClick={() => { setMenuOpen(false); setShowModal(true); }}
-              className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-red-50 transition-colors"
-            >
-              Delete
-            </button>
-          </div>
-        )}
+        {/* 3-dot menu */}
+        <div className="relative" ref={menuRef}>
+          <button
+            onClick={() => setMenuOpen((o) => !o)}
+            className="w-10 h-10 rounded-[6.667px] border border-[#3e260f] flex items-center justify-center hover:bg-[rgba(62,38,15,0.05)] transition-colors"
+            aria-label="Recipe options"
+          >
+            <svg width="16" height="4" viewBox="0 0 16 4" fill="none">
+              <circle cx="2" cy="2" r="1.5" fill="#3e260f" />
+              <circle cx="8" cy="2" r="1.5" fill="#3e260f" />
+              <circle cx="14" cy="2" r="1.5" fill="#3e260f" />
+            </svg>
+          </button>
+
+          {menuOpen && (
+            <div className="absolute right-0 mt-2 w-36 bg-white rounded-lg border border-[rgba(62,38,15,0.1)] shadow-lg z-20 py-1">
+              <Link
+                href={`/recipes/${recipeId}/edit`}
+                className="block px-4 py-2 text-sm text-[#3e260f] hover:bg-[#f8f0eb] transition-colors"
+                onClick={() => setMenuOpen(false)}
+              >
+                Edit
+              </Link>
+              <button
+                onClick={() => { setMenuOpen(false); setShowModal(true); }}
+                className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-red-50 transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Delete confirmation modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-          {/* Backdrop */}
           <div
             className="absolute inset-0 bg-black/30 backdrop-blur-sm"
             onClick={() => !deleting && setShowModal(false)}
           />
-          {/* Modal */}
           <div className="relative bg-white rounded-2xl shadow-xl p-8 w-full max-w-sm">
             <h2 className="text-lg font-bold text-[#3e260f] mb-2">Delete recipe?</h2>
             <p className="text-sm text-[rgba(62,38,15,0.5)] mb-6">

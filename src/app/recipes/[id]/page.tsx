@@ -76,7 +76,7 @@ export default async function RecipePage({
           )}
         </div>
         <div className="shrink-0 mt-1">
-          <RecipeActions recipeId={id} />
+          <RecipeActions recipeId={id} initialIsFavorite={recipe.is_favorite ?? false} />
         </div>
       </div>
 
