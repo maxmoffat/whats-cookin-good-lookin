@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { RecipeWithDetails } from "@/lib/supabase/types";
+import { useAddMealModal } from "@/components/AddMealModal";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -157,6 +158,7 @@ function RowMenu({
   onToggleFavorite: () => void;
 }) {
   const router = useRouter();
+  const { open: openAddMeal } = useAddMealModal();
   const [open, setOpen] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -206,6 +208,15 @@ function RowMenu({
               className="w-full text-left px-4 py-2 text-sm text-[#3e260f] hover:bg-[#f8f0eb] transition-colors"
             >
               {isFavorite ? "Remove from Favorites" : "Add to Favorites"}
+            </button>
+            <button
+              onClick={() => {
+                setOpen(false);
+                openAddMeal({ recipeId });
+              }}
+              className="w-full text-left px-4 py-2 text-sm text-[#3e260f] hover:bg-[#f8f0eb] transition-colors"
+            >
+              Add to Meal Plan
             </button>
             <Link
               href={`/recipes/${recipeId}/edit`}

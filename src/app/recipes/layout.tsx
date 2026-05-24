@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { AddRecipeModalProvider } from "@/components/AddRecipeModal";
+import { AddMealModalProvider } from "@/components/AddMealModal";
 import AppShell from "@/components/AppShell";
 
 export default async function RecipesLayout({
@@ -15,9 +16,11 @@ export default async function RecipesLayout({
 
   return (
     <AddRecipeModalProvider>
-      <AppShell userEmail={user.email ?? ""}>
-        {children}
-      </AppShell>
+      <AddMealModalProvider>
+        <AppShell userEmail={user.email ?? ""}>
+          {children}
+        </AppShell>
+      </AddMealModalProvider>
     </AddRecipeModalProvider>
   );
 }

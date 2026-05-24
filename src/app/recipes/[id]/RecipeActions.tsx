@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { useAddMealModal } from "@/components/AddMealModal";
 
 function HeartOutline() {
   return (
@@ -22,6 +23,7 @@ export default function RecipeActions({
   initialIsFavorite: boolean;
 }) {
   const router = useRouter();
+  const { open: openAddMeal } = useAddMealModal();
   const [menuOpen, setMenuOpen] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -91,6 +93,15 @@ export default function RecipeActions({
 
           {menuOpen && (
             <div className="absolute right-0 mt-2 w-36 bg-white rounded-lg border border-[rgba(62,38,15,0.1)] shadow-lg z-20 py-1">
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
+                  openAddMeal({ recipeId });
+                }}
+                className="w-full text-left px-4 py-2 text-sm text-[#3e260f] hover:bg-[#f8f0eb] transition-colors"
+              >
+                Add to Meal Plan
+              </button>
               <Link
                 href={`/recipes/${recipeId}/edit`}
                 className="block px-4 py-2 text-sm text-[#3e260f] hover:bg-[#f8f0eb] transition-colors"

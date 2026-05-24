@@ -6,6 +6,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import type { RecipeWithDetails } from "@/lib/supabase/types";
+import { useAddMealModal } from "@/components/AddMealModal";
 
 function formatTime(minutes: number | null): string {
   if (!minutes) return "—";
@@ -25,6 +26,7 @@ function HeartWhiteFill() {
 
 export default function RecipeCard({ recipe }: { recipe: RecipeWithDetails }) {
   const router = useRouter();
+  const { open: openAddMeal } = useAddMealModal();
   const [menuOpen, setMenuOpen] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -138,6 +140,15 @@ export default function RecipeCard({ recipe }: { recipe: RecipeWithDetails }) {
                 className="w-full text-left px-4 py-2 text-sm text-[#3e260f] hover:bg-[#f8f0eb] transition-colors"
               >
                 {isFavorite ? "Remove from Favorites" : "Add to Favorites"}
+              </button>
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
+                  openAddMeal({ recipeId: recipe.id });
+                }}
+                className="w-full text-left px-4 py-2 text-sm text-[#3e260f] hover:bg-[#f8f0eb] transition-colors"
+              >
+                Add to Meal Plan
               </button>
               <Link
                 href={`/recipes/${recipe.id}/edit`}

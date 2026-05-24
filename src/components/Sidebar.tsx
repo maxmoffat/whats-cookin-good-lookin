@@ -76,7 +76,7 @@ const NAV_ITEMS = [
     matchExact: true,
   },
   {
-    label: "Meal Plan",
+    label: "Meal Plan Calendar",
     href: "/recipes/meal-plan",
     icon: MealPlanIcon,
     matchExact: false,

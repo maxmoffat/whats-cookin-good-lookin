@@ -60,6 +60,18 @@ export interface Database {
         Insert: Database["public"]["Tables"]["recipe_tags"]["Row"];
         Update: Partial<Database["public"]["Tables"]["recipe_tags"]["Row"]>;
       };
+      meal_plan: {
+        Row: {
+          id: string;
+          user_id: string;
+          recipe_id: string;
+          date: string; // YYYY-MM-DD
+          meal_time: "breakfast" | "lunch" | "dinner";
+          created_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["meal_plan"]["Row"], "id" | "created_at">;
+        Update: Partial<Database["public"]["Tables"]["meal_plan"]["Insert"]>;
+      };
     };
   };
 }
@@ -71,6 +83,12 @@ export type Tag = Database["public"]["Tables"]["tags"]["Row"];
 export type RecipeWithDetails = Recipe & {
   ingredients: Ingredient[];
   tags: Tag[];
+};
+
+export type MealTime = "breakfast" | "lunch" | "dinner";
+export type MealPlan = Database["public"]["Tables"]["meal_plan"]["Row"];
+export type MealPlanWithRecipe = MealPlan & {
+  recipes: { id: string; name: string } | null;
 };
 
 export interface ExtractedRecipe {
