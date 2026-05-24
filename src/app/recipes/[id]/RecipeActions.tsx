@@ -13,13 +13,6 @@ function HeartOutline() {
   );
 }
 
-function HeartFill() {
-  return (
-    <svg width="16" height="14" viewBox="0 0 16 14" fill="none" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0">
-      <path fillRule="evenodd" clipRule="evenodd" d="M4.59878 0.0106455C5.71934 0.091842 6.88696 0.638082 8.00467 1.7436C9.1221 0.63839 10.2887 0.0931906 11.4082 0.0137997C12.6717 -0.075808 13.7887 0.434856 14.5969 1.24055C16.1857 2.82464 16.6847 5.69106 14.7131 7.66268C14.7065 7.66933 14.6996 7.67582 14.6926 7.68213L8.38827 13.3927C8.17055 13.5898 7.83878 13.5898 7.62107 13.3927L1.31667 7.68213C1.3097 7.67582 1.30289 7.66933 1.29624 7.66268C-0.685657 5.68078 -0.189367 2.81404 1.40473 1.23118C2.21486 0.426754 3.33412 -0.0809849 4.59878 0.0106455Z" fill="white"/>
-    </svg>
-  );
-}
 
 export default function RecipeActions({
   recipeId,
@@ -72,13 +65,13 @@ export default function RecipeActions({
         <button
           onClick={handleToggleFavorite}
           disabled={togglingFav}
-          className={`flex items-center gap-2 h-10 px-4 rounded-[6.667px] border text-sm transition-colors disabled:opacity-50 whitespace-nowrap ${
+          className={`flex items-center gap-2 h-10 px-4 rounded-[6.667px] border border-[#b9732c] text-[#b9732c] text-sm transition-colors disabled:opacity-50 whitespace-nowrap ${
             isFavorite
-              ? "bg-[#b9732c] border-[#b9732c] text-white hover:bg-[#a0621f]"
-              : "bg-transparent border-[#b9732c] text-[#b9732c] hover:bg-[rgba(185,115,44,0.05)]"
+              ? "bg-[rgba(185,115,44,0.15)] hover:bg-[rgba(185,115,44,0.22)]"
+              : "bg-transparent hover:bg-[rgba(185,115,44,0.05)]"
           }`}
         >
-          {isFavorite ? <HeartFill /> : <HeartOutline />}
+          <HeartOutline />
           {isFavorite ? "Remove from Favorites" : "Add to Favorites"}
         </button>
 
