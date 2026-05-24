@@ -124,7 +124,10 @@ export default function RecipeForm({ initialData, recipeId, onSaved }: RecipeFor
   // ── Submit ──────────────────────────────────────────────────────────────────
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim()) {
+      setError("Recipe name is required.");
+      return;
+    }
     setSaving(true);
     setError(null);
 
@@ -376,7 +379,11 @@ export default function RecipeForm({ initialData, recipeId, onSaved }: RecipeFor
         <button
           type="submit"
           disabled={saving || imageUploading}
-          className="rounded-lg bg-[#b9732c] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#a0621f] transition-colors disabled:opacity-50"
+          className={`rounded-lg bg-[#b9732c] px-5 py-2.5 text-sm font-semibold text-white transition-colors disabled:opacity-50 ${
+            !name.trim() || saving || imageUploading
+              ? "opacity-40 cursor-not-allowed"
+              : "hover:bg-[#a0621f] cursor-pointer"
+          }`}
         >
           {saving ? "Saving…" : recipeId ? "Save changes" : "Save recipe"}
         </button>

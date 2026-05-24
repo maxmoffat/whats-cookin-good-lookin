@@ -64,7 +64,8 @@ export interface Database {
         Row: {
           id: string;
           user_id: string;
-          recipe_id: string;
+          recipe_id: string | null;
+          custom_recipe_name: string | null;
           date: string; // YYYY-MM-DD
           meal_time: "breakfast" | "lunch" | "dinner";
           color: "green" | "orange" | "blue";

@@ -199,6 +199,7 @@ export interface AddMealModalProps {
   initialDate?: string; // YYYY-MM-DD — used in edit mode
   initialMealTime?: MealTime;
   initialColor?: MealColor;
+  initialCustomRecipeName?: string; // set when editing a manually-added entry
   /** "edit" keeps a single <input type="date"> and disables the recipe field */
   mode?: "add" | "edit";
   mealPlanId?: string;
@@ -212,6 +213,7 @@ export function AddMealModal({
   initialDate,
   initialMealTime,
   initialColor,
+  initialCustomRecipeName,
   mode = "add",
   mealPlanId,
 }: AddMealModalProps) {
@@ -219,6 +221,11 @@ export function AddMealModal({
   const [search, setSearch] = useState("");
   const [selectedRecipe, setSelectedRecipe] = useState<RecipeOption | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+
+  // Add mode: toggle between saved-recipe search and custom name input
+  const [recipeMode, setRecipeMode] = useState<"search" | "custom">("search");
+  const [customRecipeName, setCustomRecipeName] = useState(""); // add mode custom name
+  const [editCustomName, setEditCustomName] = useState(initialCustomRecipeName ?? ""); // edit mode custom name
 
   // Add mode: multi-select set of YYYY-MM-DD strings
   const [selectedDates, setSelectedDates] = useState<Set<string>>(new Set());
@@ -234,6 +241,9 @@ export function AddMealModal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const comboRef = useRef<HTMLDivElement>(null);
+
+  // True when editing a manually-named entry (no recipe_id)
+  const isCustomEdit = mode === "edit" && initialCustomRecipeName !== undefined;
 
   // Fetch recipe list when modal opens
   useEffect(() => {
@@ -259,7 +269,10 @@ export function AddMealModal({
       setSearch("");
       setSelectedRecipe(null);
       setSelectedDates(new Set());
+      setRecipeMode("search");
+      setCustomRecipeName("");
       setEditDate(initialDate ?? "");
+      setEditCustomName(initialCustomRecipeName ?? "");
       setMealTime(initialMealTime ?? "");
       setColor(initialColor ?? "green");
       setError("");
@@ -267,16 +280,17 @@ export function AddMealModal({
       setMealTimeOpen(false);
       setColorOpen(false);
     }
-  }, [isOpen, initialDate, initialMealTime, initialColor]);
+  }, [isOpen, initialDate, initialMealTime, initialColor, initialCustomRecipeName]);
 
-  // Re-sync edit date / meal time / color when they change (edit mode re-open)
+  // Re-sync edit fields when they change (edit mode re-open)
   useEffect(() => {
     if (isOpen) {
       setEditDate(initialDate ?? "");
+      setEditCustomName(initialCustomRecipeName ?? "");
       setMealTime(initialMealTime ?? "");
       setColor(initialColor ?? "green");
     }
-  }, [isOpen, initialDate, initialMealTime, initialColor]);
+  }, [isOpen, initialDate, initialMealTime, initialColor, initialCustomRecipeName]);
 
   // Close combo / mealTime / color dropdowns on outside click
   useEffect(() => {
@@ -308,6 +322,13 @@ export function AddMealModal({
     r.name.toLowerCase().includes(search.toLowerCase())
   );
 
+  // Whether all required fields are filled (drives visual disabled state)
+  const isReady = mode === "edit"
+    ? (isCustomEdit ? !!editCustomName.trim() : true) && !!editDate && !!mealTime
+    : (recipeMode === "search" ? !!selectedRecipe : !!customRecipeName.trim()) &&
+      selectedDates.size > 0 &&
+      !!mealTime;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
@@ -315,14 +336,20 @@ export function AddMealModal({
     const supabase = createClient();
 
     if (mode === "edit") {
+      if (isCustomEdit && !editCustomName.trim()) {
+        setError("Recipe name is required.");
+        return;
+      }
       if (!editDate || !mealTime) {
         setError("Date and meal time are required.");
         return;
       }
       setSubmitting(true);
+      const updatePayload: Record<string, unknown> = { date: editDate, meal_time: mealTime, color };
+      if (isCustomEdit) updatePayload.custom_recipe_name = editCustomName.trim();
       const { error: err } = await supabase
         .from("meal_plan")
-        .update({ date: editDate, meal_time: mealTime, color })
+        .update(updatePayload)
         .eq("id", mealPlanId!);
       if (err) {
         console.error("meal_plan update error:", err);
@@ -331,8 +358,12 @@ export function AddMealModal({
         return;
       }
     } else {
-      if (!selectedRecipe) {
+      if (recipeMode === "search" && !selectedRecipe) {
         setError("Please select a recipe.");
+        return;
+      }
+      if (recipeMode === "custom" && !customRecipeName.trim()) {
+        setError("Please enter a recipe name.");
         return;
       }
       if (selectedDates.size === 0) {
@@ -344,13 +375,12 @@ export function AddMealModal({
         return;
       }
       setSubmitting(true);
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
 
       const inserts = Array.from(selectedDates).map((d) => ({
         user_id: user!.id,
-        recipe_id: selectedRecipe.id,
+        recipe_id: recipeMode === "search" ? selectedRecipe!.id : null,
+        custom_recipe_name: recipeMode === "custom" ? customRecipeName.trim() : null,
         date: d,
         meal_time: mealTime,
         color,
@@ -409,100 +439,116 @@ export function AddMealModal({
         <form onSubmit={handleSubmit} className="flex flex-col gap-6">
           {/* ── Recipe ── */}
           <div>
-            <label className="block text-[12px] text-[#3e260f] mb-2">
-              Select from your saved recipes:
-            </label>
-            <div ref={comboRef} className="relative">
-              <div
-                className={`h-[40px] border rounded-[8px] flex items-center px-4 gap-2 ${
-                  mode === "edit"
-                    ? "bg-[rgba(62,38,15,0.05)] border-[rgba(34,34,34,0.1)] cursor-not-allowed"
-                    : "bg-white border-[rgba(34,34,34,0.2)] cursor-pointer"
-                }`}
-                onClick={() => {
-                  if (mode === "add" && !selectedRecipe) {
-                    setDropdownOpen((o) => !o);
-                  }
-                }}
-              >
-                {selectedRecipe ? (
-                  <>
-                    <span className="flex-1 text-[16px] text-[#3e260f] truncate">
-                      {selectedRecipe.name}
-                    </span>
-                    {mode === "add" && (
+            {/* Label row — right side is the mode-swap link (add mode only) */}
+            <div className="flex items-baseline justify-between mb-2">
+              <label className="text-[12px] text-[#3e260f]">
+                {mode === "edit"
+                  ? isCustomEdit
+                    ? "Custom recipe name:"
+                    : "Selected recipe:"
+                  : recipeMode === "search"
+                  ? "Select from your saved recipes or add a custom recipe name:"
+                  : "Add a custom recipe name or search your saved recipes:"}
+              </label>
+              {mode === "add" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRecipeMode((m) => (m === "search" ? "custom" : "search"));
+                    setSelectedRecipe(null);
+                    setCustomRecipeName("");
+                    setSearch("");
+                    setDropdownOpen(false);
+                  }}
+                  className="text-[12px] text-[#b9732c] hover:opacity-70 transition-opacity flex-shrink-0 ml-3"
+                >
+                  {recipeMode === "search" ? "Add a custom name instead" : "Search saved recipes instead"}
+                </button>
+              )}
+            </div>
+
+            {/* Edit mode — custom name: editable text input */}
+            {mode === "edit" && isCustomEdit ? (
+              <input
+                type="text"
+                value={editCustomName}
+                onChange={(e) => setEditCustomName(e.target.value)}
+                placeholder="Recipe name…"
+                className="h-[40px] w-full border border-[rgba(34,34,34,0.2)] rounded-[8px] px-4 text-[16px] text-[#3e260f] outline-none focus:border-[#b9732c] transition-colors bg-white placeholder:text-[rgba(62,38,15,0.35)]"
+              />
+            ) : mode === "edit" ? (
+              /* Edit mode — saved recipe: disabled name display */
+              <div className="h-[40px] border rounded-[8px] flex items-center px-4 bg-[rgba(62,38,15,0.05)] border-[rgba(34,34,34,0.1)] cursor-not-allowed">
+                <span className="flex-1 text-[16px] text-[#3e260f] truncate">
+                  {selectedRecipe?.name ?? ""}
+                </span>
+              </div>
+            ) : recipeMode === "custom" ? (
+              /* Add mode — custom name input */
+              <input
+                type="text"
+                value={customRecipeName}
+                onChange={(e) => setCustomRecipeName(e.target.value)}
+                placeholder="Type in a name for your custom recipe..."
+                className="h-[40px] w-full border border-[rgba(34,34,34,0.2)] rounded-[8px] px-4 text-[16px] text-[#3e260f] outline-none focus:border-[#b9732c] transition-colors bg-white placeholder:text-[rgba(62,38,15,0.35)]"
+              />
+            ) : (
+              /* Add mode — saved recipe search dropdown */
+              <div ref={comboRef} className="relative">
+                <div
+                  className="h-[40px] border border-[rgba(34,34,34,0.2)] rounded-[8px] flex items-center px-4 gap-2 bg-white cursor-pointer"
+                  onClick={() => { if (!selectedRecipe) setDropdownOpen((o) => !o); }}
+                >
+                  {selectedRecipe ? (
+                    <>
+                      <span className="flex-1 text-[16px] text-[#3e260f] truncate">
+                        {selectedRecipe.name}
+                      </span>
                       <button
                         type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedRecipe(null);
-                          setSearch("");
-                        }}
+                        onClick={(e) => { e.stopPropagation(); setSelectedRecipe(null); setSearch(""); }}
                         className="text-[rgba(62,38,15,0.4)] hover:text-[#3e260f] text-lg leading-none flex-shrink-0"
                       >
                         ×
                       </button>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <input
-                      type="text"
-                      value={search}
-                      onChange={(e) => {
-                        setSearch(e.target.value);
-                        setDropdownOpen(true);
-                      }}
-                      onFocus={() => setDropdownOpen(true)}
-                      placeholder="Search recipes…"
-                      className="flex-1 text-[16px] text-[#3e260f] outline-none bg-transparent placeholder:text-[rgba(62,38,15,0.35)]"
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                    <svg
-                      width="12"
-                      height="7"
-                      viewBox="0 0 12 7"
-                      fill="none"
-                      className="flex-shrink-0"
-                    >
-                      <path
-                        d="M1 1l5 5 5-5"
-                        stroke="#3E260F"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </>
-                )}
-              </div>
-
-              {/* Dropdown list */}
-              {dropdownOpen && mode === "add" && (
-                <div className="absolute top-full mt-1 left-0 right-0 bg-white border border-[rgba(34,34,34,0.2)] rounded-[8px] shadow-lg max-h-[200px] overflow-y-auto z-20">
-                  {filteredRecipes.length === 0 ? (
-                    <p className="px-4 py-3 text-sm text-[rgba(62,38,15,0.4)]">
-                      No recipes found
-                    </p>
+                    </>
                   ) : (
-                    filteredRecipes.map((r) => (
-                      <button
-                        key={r.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedRecipe(r);
-                          setDropdownOpen(false);
-                          setSearch("");
-                        }}
-                        className="w-full text-left px-4 py-2.5 text-[14px] text-[#3e260f] hover:bg-[#f8f0eb] transition-colors"
-                      >
-                        {r.name}
-                      </button>
-                    ))
+                    <>
+                      <input
+                        type="text"
+                        value={search}
+                        onChange={(e) => { setSearch(e.target.value); setDropdownOpen(true); }}
+                        onFocus={() => setDropdownOpen(true)}
+                        placeholder="Search your saved recipes..."
+                        className="flex-1 text-[16px] text-[#3e260f] outline-none bg-transparent placeholder:text-[rgba(62,38,15,0.35)]"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      <svg width="12" height="7" viewBox="0 0 12 7" fill="none" className="flex-shrink-0">
+                        <path d="M1 1l5 5 5-5" stroke="#3E260F" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </>
                   )}
                 </div>
-              )}
-            </div>
+                {dropdownOpen && (
+                  <div className="absolute top-full mt-1 left-0 right-0 bg-white border border-[rgba(34,34,34,0.2)] rounded-[8px] shadow-lg max-h-[200px] overflow-y-auto z-20">
+                    {filteredRecipes.length === 0 ? (
+                      <p className="px-4 py-3 text-sm text-[rgba(62,38,15,0.4)]">No recipes found</p>
+                    ) : (
+                      filteredRecipes.map((r) => (
+                        <button
+                          key={r.id}
+                          type="button"
+                          onClick={() => { setSelectedRecipe(r); setDropdownOpen(false); setSearch(""); }}
+                          className="w-full text-left px-4 py-2.5 text-[14px] text-[#3e260f] hover:bg-[#f8f0eb] transition-colors"
+                        >
+                          {r.name}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* ── Date(s) ── */}
@@ -638,7 +684,11 @@ export function AddMealModal({
             <button
               type="submit"
               disabled={submitting}
-              className="h-[40px] px-6 bg-[#b9732c] text-white rounded-[8px] text-[16px] font-bold hover:bg-[#a0621f] transition-colors disabled:opacity-50"
+              className={`h-[40px] px-6 bg-[#b9732c] text-white rounded-[8px] text-[16px] font-bold transition-colors disabled:opacity-50 ${
+                isReady && !submitting
+                  ? "hover:bg-[#a0621f] cursor-pointer"
+                  : "opacity-40 cursor-not-allowed"
+              }`}
             >
               {submitting
                 ? "Saving…"
