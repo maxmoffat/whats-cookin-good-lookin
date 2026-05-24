@@ -31,6 +31,164 @@ const Ctx = createContext<{ open: (opts?: AddMealOpts) => void }>({
 });
 export const useAddMealModal = () => useContext(Ctx);
 
+// ─── Color config (shared with MealPlanClient via this export) ───────────────
+
+export type MealColor = "green" | "orange" | "blue";
+
+export const MEAL_COLOR_OPTIONS: {
+  value: MealColor;
+  label: string;
+  dot: string;        // full-opacity dot colour
+  bg: string;         // 10% card background
+  bgHover: string;    // ~50% hover background
+}[] = [
+  {
+    value: "green",
+    label: "Green",
+    dot: "rgb(67,145,60)",
+    bg: "rgba(67,145,60,0.1)",
+    bgHover: "rgba(67,145,60,0.5)",
+  },
+  {
+    value: "orange",
+    label: "Orange",
+    dot: "#b9732c",
+    bg: "rgba(185,115,44,0.1)",
+    bgHover: "rgba(185,115,44,0.5)",
+  },
+  {
+    value: "blue",
+    label: "Blue",
+    dot: "#2C6CB9",
+    bg: "rgba(44,108,185,0.1)",
+    bgHover: "rgba(44,108,185,0.5)",
+  },
+];
+
+// ─── Date utilities (local to this file) ─────────────────────────────────────
+
+const DAY_ABBREV = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+function getMondayOfWeek(date: Date): Date {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return d;
+}
+
+function toDateKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function isPastDay(date: Date): boolean {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d < today;
+}
+
+// ─── Date toggle picker (add mode only) ───────────────────────────────────────
+
+function DateTogglePicker({
+  selectedDates,
+  onToggle,
+}: {
+  selectedDates: Set<string>;
+  onToggle: (key: string) => void;
+}) {
+  const [weekCount, setWeekCount] = useState(1);
+  const MAX_WEEKS = 4;
+
+  const weekStart = getMondayOfWeek(new Date());
+
+  // Build `weekCount` rows of 7 days each
+  const weeks: Date[][] = Array.from({ length: weekCount }, (_, wi) =>
+    Array.from({ length: 7 }, (_, di) => {
+      const d = new Date(weekStart);
+      d.setDate(d.getDate() + wi * 7 + di);
+      return d;
+    })
+  );
+
+  return (
+    <div className="flex flex-col gap-2">
+      {weeks.map((week, wi) => (
+        <div key={wi} className="grid grid-cols-7 gap-[6px]">
+          {week.map((date, di) => {
+            const key = toDateKey(date);
+            const selected = selectedDates.has(key);
+            const past = isPastDay(date);
+
+            return (
+              <button
+                key={di}
+                type="button"
+                disabled={past}
+                onClick={() => onToggle(key)}
+                className={`h-[40px] rounded-[8px] border flex flex-col items-center justify-center transition-colors ${
+                  past
+                    ? "opacity-25 cursor-not-allowed bg-white border-[rgba(34,34,34,0.2)]"
+                    : selected
+                    ? "bg-[rgba(185,115,44,0.25)] border-[#b9732c] cursor-pointer"
+                    : "bg-white border-[rgba(34,34,34,0.2)] hover:border-[rgba(62,38,15,0.5)] cursor-pointer"
+                }`}
+              >
+                <span
+                  className={`text-[10px] leading-[14px] ${
+                    selected && !past
+                      ? "text-[#b9732c] font-bold"
+                      : "text-[#3e260f] font-normal"
+                  }`}
+                >
+                  {DAY_ABBREV[di]}
+                </span>
+                <span
+                  className={`text-[10px] leading-[14px] ${
+                    selected && !past
+                      ? "text-[#b9732c] font-bold"
+                      : "text-[#3e260f] font-normal"
+                  }`}
+                >
+                  {date.getDate()}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      ))}
+
+      {/* Show Additional Week */}
+      <div className="flex justify-end mt-1">
+        {weekCount < MAX_WEEKS ? (
+          <button
+            type="button"
+            onClick={() => setWeekCount((c) => c + 1)}
+            className="text-[12px] text-[#b9732c] hover:opacity-70 transition-opacity"
+          >
+            + Show Additional Week
+          </button>
+        ) : (
+          <div className="relative group/tip">
+            <span className="text-[12px] text-[#b9732c] opacity-40 cursor-not-allowed select-none">
+              + Show Additional Week
+            </span>
+            {/* Tooltip */}
+            <div className="pointer-events-none absolute right-0 bottom-full mb-1.5 opacity-0 group-hover/tip:opacity-100 transition-opacity z-20">
+              <div className="bg-[#3e260f] text-white text-xs font-medium px-2.5 py-1.5 rounded-[6px] whitespace-nowrap shadow-md">
+                Only a month can be shown at a time
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Modal component ──────────────────────────────────────────────────────────
 
 export interface AddMealModalProps {
@@ -38,9 +196,10 @@ export interface AddMealModalProps {
   onClose: () => void;
   onSuccess?: () => void;
   initialRecipeId?: string;
-  initialDate?: string; // YYYY-MM-DD
+  initialDate?: string; // YYYY-MM-DD — used in edit mode
   initialMealTime?: MealTime;
-  /** "edit" disables the recipe field; expects mealPlanId */
+  initialColor?: MealColor;
+  /** "edit" keeps a single <input type="date"> and disables the recipe field */
   mode?: "add" | "edit";
   mealPlanId?: string;
 }
@@ -52,6 +211,7 @@ export function AddMealModal({
   initialRecipeId,
   initialDate,
   initialMealTime,
+  initialColor,
   mode = "add",
   mealPlanId,
 }: AddMealModalProps) {
@@ -59,8 +219,18 @@ export function AddMealModal({
   const [search, setSearch] = useState("");
   const [selectedRecipe, setSelectedRecipe] = useState<RecipeOption | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [date, setDate] = useState(initialDate ?? "");
+
+  // Add mode: multi-select set of YYYY-MM-DD strings
+  const [selectedDates, setSelectedDates] = useState<Set<string>>(new Set());
+  // Edit mode: single date string
+  const [editDate, setEditDate] = useState(initialDate ?? "");
+
   const [mealTime, setMealTime] = useState<MealTime | "">(initialMealTime ?? "");
+  const [mealTimeOpen, setMealTimeOpen] = useState(false);
+  const mealTimeRef = useRef<HTMLDivElement>(null);
+  const [color, setColor] = useState<MealColor>(initialColor ?? "green");
+  const [colorOpen, setColorOpen] = useState(false);
+  const colorRef = useRef<HTMLDivElement>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const comboRef = useRef<HTMLDivElement>(null);
@@ -83,36 +253,56 @@ export function AddMealModal({
       });
   }, [isOpen, initialRecipeId]);
 
-  // Reset fields when modal closes
+  // Reset when modal closes
   useEffect(() => {
     if (!isOpen) {
       setSearch("");
       setSelectedRecipe(null);
-      setDate(initialDate ?? "");
+      setSelectedDates(new Set());
+      setEditDate(initialDate ?? "");
       setMealTime(initialMealTime ?? "");
+      setColor(initialColor ?? "green");
       setError("");
       setDropdownOpen(false);
+      setMealTimeOpen(false);
+      setColorOpen(false);
     }
-  }, [isOpen, initialDate, initialMealTime]);
+  }, [isOpen, initialDate, initialMealTime, initialColor]);
 
-  // Re-sync initialDate / initialMealTime when they change (edit mode re-open)
+  // Re-sync edit date / meal time / color when they change (edit mode re-open)
   useEffect(() => {
     if (isOpen) {
-      setDate(initialDate ?? "");
+      setEditDate(initialDate ?? "");
       setMealTime(initialMealTime ?? "");
+      setColor(initialColor ?? "green");
     }
-  }, [isOpen, initialDate, initialMealTime]);
+  }, [isOpen, initialDate, initialMealTime, initialColor]);
 
-  // Close combo dropdown on outside click
+  // Close combo / mealTime / color dropdowns on outside click
   useEffect(() => {
     function handler(e: MouseEvent) {
       if (comboRef.current && !comboRef.current.contains(e.target as Node)) {
         setDropdownOpen(false);
       }
+      if (mealTimeRef.current && !mealTimeRef.current.contains(e.target as Node)) {
+        setMealTimeOpen(false);
+      }
+      if (colorRef.current && !colorRef.current.contains(e.target as Node)) {
+        setColorOpen(false);
+      }
     }
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+
+  function toggleDate(key: string) {
+    setSelectedDates((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   const filteredRecipes = recipes.filter((r) =>
     r.name.toLowerCase().includes(search.toLowerCase())
@@ -120,19 +310,20 @@ export function AddMealModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedRecipe || !date || !mealTime) {
-      setError("All three fields are required.");
-      return;
-    }
-    setSubmitting(true);
     setError("");
+
     const supabase = createClient();
 
-    if (mode === "edit" && mealPlanId) {
+    if (mode === "edit") {
+      if (!editDate || !mealTime) {
+        setError("Date and meal time are required.");
+        return;
+      }
+      setSubmitting(true);
       const { error: err } = await supabase
         .from("meal_plan")
-        .update({ date, meal_time: mealTime })
-        .eq("id", mealPlanId);
+        .update({ date: editDate, meal_time: mealTime, color })
+        .eq("id", mealPlanId!);
       if (err) {
         console.error("meal_plan update error:", err);
         setError(err.message || "Failed to update. Please try again.");
@@ -140,15 +331,32 @@ export function AddMealModal({
         return;
       }
     } else {
+      if (!selectedRecipe) {
+        setError("Please select a recipe.");
+        return;
+      }
+      if (selectedDates.size === 0) {
+        setError("Please select at least one date.");
+        return;
+      }
+      if (!mealTime) {
+        setError("Please select a meal time.");
+        return;
+      }
+      setSubmitting(true);
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      const { error: err } = await supabase.from("meal_plan").insert({
+
+      const inserts = Array.from(selectedDates).map((d) => ({
         user_id: user!.id,
         recipe_id: selectedRecipe.id,
-        date,
+        date: d,
         meal_time: mealTime,
-      });
+        color,
+      }));
+
+      const { error: err } = await supabase.from("meal_plan").insert(inserts);
       if (err) {
         console.error("meal_plan insert error:", err);
         setError(err.message || "Failed to add meal. Please try again.");
@@ -297,17 +505,27 @@ export function AddMealModal({
             </div>
           </div>
 
-          {/* ── Date ── */}
+          {/* ── Date(s) ── */}
           <div>
             <label className="block text-[12px] text-[#3e260f] mb-2">
-              Select a date:
+              {mode === "edit" ? "Select a date:" : "Select date(s):"}
             </label>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="h-[40px] w-[272px] border border-[rgba(34,34,34,0.2)] rounded-[8px] px-4 text-[16px] text-[#3e260f] outline-none focus:border-[#b9732c] transition-colors bg-white"
-            />
+
+            {mode === "edit" ? (
+              /* Edit: single native date input */
+              <input
+                type="date"
+                value={editDate}
+                onChange={(e) => setEditDate(e.target.value)}
+                className="h-[40px] w-[272px] border border-[rgba(34,34,34,0.2)] rounded-[8px] px-4 text-[16px] text-[#3e260f] outline-none focus:border-[#b9732c] transition-colors bg-white"
+              />
+            ) : (
+              /* Add: multi-select toggle picker */
+              <DateTogglePicker
+                selectedDates={selectedDates}
+                onToggle={toggleDate}
+              />
+            )}
           </div>
 
           {/* ── Meal time ── */}
@@ -315,36 +533,105 @@ export function AddMealModal({
             <label className="block text-[12px] text-[#3e260f] mb-2">
               Select a meal time:
             </label>
-            <div className="relative w-full">
-              <select
-                value={mealTime}
-                onChange={(e) => setMealTime(e.target.value as MealTime)}
-                className="h-[40px] w-full border border-[rgba(34,34,34,0.2)] rounded-[8px] px-4 pr-10 text-[16px] text-[#3e260f] outline-none focus:border-[#b9732c] transition-colors appearance-none bg-white cursor-pointer"
+            <div ref={mealTimeRef} className="relative">
+              <div
+                onClick={() => setMealTimeOpen((o) => !o)}
+                className="h-[40px] border border-[rgba(34,34,34,0.2)] rounded-[8px] flex items-center px-4 cursor-pointer bg-white"
               >
-                <option value="" disabled>
-                  Select…
-                </option>
-                <option value="breakfast">Breakfast</option>
-                <option value="lunch">Lunch</option>
-                <option value="dinner">Dinner</option>
-              </select>
-              <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2">
-                <svg width="12" height="7" viewBox="0 0 12 7" fill="none">
-                  <path
-                    d="M1 1l5 5 5-5"
-                    stroke="#3E260F"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
+                <span
+                  className={`flex-1 text-[16px] ${
+                    mealTime ? "text-[#3e260f]" : "text-[rgba(62,38,15,0.35)]"
+                  }`}
+                >
+                  {mealTime
+                    ? mealTime.charAt(0).toUpperCase() + mealTime.slice(1)
+                    : "Select…"}
+                </span>
+                <svg width="12" height="7" viewBox="0 0 12 7" fill="none" className="flex-shrink-0">
+                  <path d="M1 1l5 5 5-5" stroke="#3E260F" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </div>
+
+              {mealTimeOpen && (
+                <div className="absolute top-full mt-1 left-0 right-0 bg-white border border-[rgba(34,34,34,0.2)] rounded-[8px] shadow-lg z-20 py-1">
+                  {(["breakfast", "lunch", "dinner"] as MealTime[]).map((mt) => (
+                    <button
+                      key={mt}
+                      type="button"
+                      onClick={() => { setMealTime(mt); setMealTimeOpen(false); }}
+                      className="w-full flex items-center px-4 py-2.5 text-[14px] text-[#3e260f] hover:bg-[#f8f0eb] transition-colors"
+                    >
+                      <span className="flex-1 text-left">
+                        {mt.charAt(0).toUpperCase() + mt.slice(1)}
+                      </span>
+                      {mt === mealTime && (
+                        <svg width="12" height="10" viewBox="0 0 12 10" fill="none">
+                          <path d="M1 5l3.5 3.5L11 1" stroke="#3e260f" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
-          {error && (
-            <p className="text-sm text-red-500 -mt-2">{error}</p>
-          )}
+          {/* ── Color ── */}
+          <div>
+            <label className="block text-[12px] text-[#3e260f] mb-2">
+              Select a meal color (green by default):
+            </label>
+            <div ref={colorRef} className="relative">
+              {/* Trigger */}
+              {(() => {
+                const opt = MEAL_COLOR_OPTIONS.find((c) => c.value === color)!;
+                return (
+                  <div
+                    onClick={() => setColorOpen((o) => !o)}
+                    className="h-[40px] border border-[rgba(34,34,34,0.2)] rounded-[8px] flex items-center px-4 gap-3 cursor-pointer bg-white"
+                  >
+                    <span
+                      className="w-[14px] h-[14px] rounded-full flex-shrink-0 border"
+                      style={{ backgroundColor: opt.bg, borderColor: opt.bgHover }}
+                    />
+                    <span className="flex-1 text-[16px] text-[#3e260f]">
+                      {opt.label}
+                    </span>
+                    <svg width="12" height="7" viewBox="0 0 12 7" fill="none" className="flex-shrink-0">
+                      <path d="M1 1l5 5 5-5" stroke="#3E260F" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                );
+              })()}
+
+              {/* Dropdown */}
+              {colorOpen && (
+                <div className="absolute top-full mt-1 left-0 right-0 bg-white border border-[rgba(34,34,34,0.2)] rounded-[8px] shadow-lg z-20 overflow-hidden">
+                  {MEAL_COLOR_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => { setColor(opt.value); setColorOpen(false); }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-[14px] text-[#3e260f] hover:bg-[#f8f0eb] transition-colors"
+                    >
+                      <span
+                        className="w-[14px] h-[14px] rounded-full flex-shrink-0 border"
+                        style={{ backgroundColor: opt.bg, borderColor: opt.bgHover }}
+                      />
+                      <span className="flex-1 text-left">{opt.label}</span>
+                      {opt.value === color && (
+                        <svg width="12" height="10" viewBox="0 0 12 10" fill="none">
+                          <path d="M1 5l3.5 3.5L11 1" stroke="#3e260f" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {error && <p className="text-sm text-red-500 -mt-2">{error}</p>}
 
           {/* Submit */}
           <div className="flex justify-end pt-2">

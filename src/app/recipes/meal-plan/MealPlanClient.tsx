@@ -3,19 +3,19 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { AddMealModal } from "@/components/AddMealModal";
+import { AddMealModal, MEAL_COLOR_OPTIONS } from "@/components/AddMealModal";
 import type { MealPlanWithRecipe, MealTime } from "@/lib/supabase/types";
 
 // ─── Date utilities ───────────────────────────────────────────────────────────
 
-const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const MEAL_TIMES: MealTime[] = ["breakfast", "lunch", "dinner"];
 
 function getWeekStart(date: Date): Date {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() - d.getDay()); // roll back to Sunday
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // roll back to Monday
   return d;
 }
 
@@ -64,8 +64,8 @@ function ordinal(n: number): string {
 function formatWeekLabel(weekStart: Date): string {
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekEnd.getDate() + 6);
-  const s = `Sun, ${SHORT_MONTHS[weekStart.getMonth()]} ${ordinal(weekStart.getDate())}`;
-  const e = `Sat, ${SHORT_MONTHS[weekEnd.getMonth()]} ${ordinal(weekEnd.getDate())}`;
+  const s = `Mon, ${SHORT_MONTHS[weekStart.getMonth()]} ${ordinal(weekStart.getDate())}`;
+  const e = `Sun, ${SHORT_MONTHS[weekEnd.getMonth()]} ${ordinal(weekEnd.getDate())}`;
   return `${s} – ${e}`;
 }
 
@@ -84,7 +84,9 @@ function MealCard({
 }) {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [hovered, setHovered] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const colorOpt = MEAL_COLOR_OPTIONS.find((c) => c.value === (entry.color ?? "green")) ?? MEAL_COLOR_OPTIONS[0];
 
   useEffect(() => {
     function handler(e: MouseEvent) {
@@ -104,7 +106,10 @@ function MealCard({
         tabIndex={0}
         onClick={() => router.push(`/recipes/${entry.recipe_id}`)}
         onKeyDown={(e) => e.key === "Enter" && router.push(`/recipes/${entry.recipe_id}`)}
-        className="rounded-[8px] px-[12px] py-[8px] bg-[rgba(67,145,60,0.1)] hover:bg-[rgba(67,145,60,0.5)] transition-colors cursor-pointer"
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        className="rounded-[8px] px-[12px] py-[8px] transition-colors cursor-pointer"
+        style={{ backgroundColor: hovered ? colorOpt.bgHover : colorOpt.bg }}
       >
         <p className="text-[10px] text-black leading-[16px] pr-4 break-words">
           {entry.recipes?.name ?? "Unknown recipe"}
@@ -114,12 +119,12 @@ function MealCard({
       {/* 3-dot menu — visible on card hover */}
       <div
         ref={menuRef}
-        className="absolute top-1 right-1 opacity-0 group-hover/card:opacity-100 transition-opacity z-10"
+        className="absolute top-1 right-2 opacity-0 group-hover/card:opacity-100 transition-opacity z-10"
         onClick={(e) => e.stopPropagation()}
       >
         <button
           onClick={() => setMenuOpen((o) => !o)}
-          className="w-[18px] h-[18px] flex items-center justify-center rounded bg-white/90 text-[#3e260f] text-[10px] font-bold leading-none hover:bg-white shadow-sm"
+          className="text-[#3e260f] text-[11px] font-bold leading-none hover:opacity-60 transition-opacity"
           aria-label="Meal options"
         >
           ···
@@ -167,7 +172,7 @@ function MealSection({
       style={{ gridTemplateColumns: "40px repeat(7, 1fr)" }}
     >
       {/* Rotated label */}
-      <div className="border-r border-[rgba(62,38,15,0.1)] flex items-center justify-center py-6">
+      <div className="flex items-center justify-center py-6">
         <span
           className="text-[10px] font-normal tracking-[1px] text-[rgba(62,38,15,0.5)] select-none"
           style={{ writingMode: "vertical-lr", transform: "rotate(180deg)" }}
@@ -321,7 +326,7 @@ export default function MealPlanClient() {
           style={{ gridTemplateColumns: "40px repeat(7, 1fr)" }}
         >
           {/* Empty corner above label column */}
-          <div className="border-r border-[rgba(62,38,15,0.1)]" />
+          <div />
 
           {weekDays.map((day, i) => {
             const today_ = isToday(day);
@@ -382,6 +387,7 @@ export default function MealPlanClient() {
           initialRecipeId={editEntry.recipe_id}
           initialDate={editEntry.date}
           initialMealTime={editEntry.meal_time as MealTime}
+          initialColor={editEntry.color as "green" | "orange" | "blue"}
           mode="edit"
           mealPlanId={editEntry.id}
         />

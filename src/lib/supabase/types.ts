@@ -67,6 +67,7 @@ export interface Database {
           recipe_id: string;
           date: string; // YYYY-MM-DD
           meal_time: "breakfast" | "lunch" | "dinner";
+          color: "green" | "orange" | "blue";
           created_at: string;
         };
         Insert: Omit<Database["public"]["Tables"]["meal_plan"]["Row"], "id" | "created_at">;
