@@ -113,7 +113,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       }}
     >
       {/* Nav items */}
-      <nav className="flex-1 pt-[23px] px-[10px] flex flex-col gap-[4px]">
+      <nav className="flex-1 p-[10px] flex flex-col gap-[4px]">
         {NAV_ITEMS.map(({ label, href, icon: Icon, matchExact }) => {
           const active = isActive(href, matchExact);
           return (

@@ -21,6 +21,7 @@ export interface Database {
           instructions: string | null;
           image_url: string | null;
           source_url: string | null;
+          source_name: string | null;
           is_favorite: boolean;
           created_at: string;
           updated_at: string;
@@ -105,6 +106,7 @@ export interface ExtractedRecipe {
     unit: string | null;
     name: string;
   }>;
+  source_name?: string | null;
   confidence?: "high" | "medium" | "low";
   error?: string;
 }

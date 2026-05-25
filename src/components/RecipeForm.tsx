@@ -54,6 +54,10 @@ export default function RecipeForm({ initialData, recipeId, onSaved }: RecipeFor
   const [sourceUrl] = useState(
     (initialData as ExtractedRecipe & { source_url?: string })?.source_url ?? ""
   );
+  const isUrlRecipe = !!sourceUrl;
+  const [sourceName, setSourceName] = useState(
+    (initialData as ExtractedRecipe & { source_name?: string | null })?.source_name ?? ""
+  );
   const [ingredients, setIngredients] = useState<IngredientRow[]>(
     initialData?.ingredients && initialData.ingredients.length > 0
       ? toRows(initialData.ingredients as Array<{ quantity?: string | null; unit?: string | null; name: string }>)
@@ -145,6 +149,7 @@ export default function RecipeForm({ initialData, recipeId, onSaved }: RecipeFor
       servings: servings ? parseInt(servings) : null,
       instructions: validSteps.length > 0 ? validSteps.join("\n") : null,
       source_url: sourceUrl.trim() || null,
+      source_name: sourceName.trim() || null,
       image_url: imageUrl,
     };
 
@@ -233,6 +238,19 @@ export default function RecipeForm({ initialData, recipeId, onSaved }: RecipeFor
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. Grandma's Chicken Soup"
+          className={inputClass}
+        />
+      </div>
+
+      {/* Source */}
+      <div>
+        <label className={labelClass}>
+          {isUrlRecipe ? "Source Site" : "Source (ex: cookbook, influencer, etc)"}
+        </label>
+        <input
+          value={sourceName}
+          onChange={(e) => setSourceName(e.target.value)}
+          placeholder={isUrlRecipe ? "e.g. AllRecipes" : "e.g. Ottolenghi Simple"}
           className={inputClass}
         />
       </div>

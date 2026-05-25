@@ -56,42 +56,6 @@ function computePos(
   return { top, left };
 }
 
-function ImageTooltip({
-  imageUrl,
-  visible,
-  anchorEl,
-}: {
-  imageUrl: string | null;
-  visible: boolean;
-  anchorEl: HTMLElement | null;
-}) {
-  const [pos, setPos] = useState<TooltipPos | null>(null);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (visible && anchorEl && imageUrl) {
-      setPos(computePos(anchorEl, 220, 160));
-    } else {
-      setPos(null);
-    }
-  }, [visible, anchorEl, imageUrl]);
-
-  if (!mounted || !visible || !pos || !imageUrl) return null;
-
-  return createPortal(
-    <div
-      className="fixed z-[200] w-[220px] rounded-xl overflow-hidden shadow-xl border border-[rgba(62,38,15,0.1)] pointer-events-none"
-      style={{ top: pos.top, left: pos.left }}
-    >
-      <img src={imageUrl} alt="" className="w-full h-[150px] object-cover" />
-    </div>,
-    document.body
-  );
-}
 
 function IngredientsTooltip({
   ingredients,
@@ -162,17 +126,39 @@ function RowMenu({
   const [open, setOpen] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // Close on outside click
   useEffect(() => {
+    if (!open) return;
     function handler(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      const target = e.target as Node;
+      if (
+        btnRef.current?.contains(target) ||
+        dropdownRef.current?.contains(target)
+      ) return;
+      setOpen(false);
     }
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, []);
+  }, [open]);
+
+  function handleToggle(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (open) { setOpen(false); return; }
+    if (!btnRef.current) return;
+    const rect = btnRef.current.getBoundingClientRect();
+    const DROPDOWN_H = 148; // ~4 items × 37px
+    const DROPDOWN_W = 176; // w-44
+    const wouldClipBottom = rect.bottom + DROPDOWN_H + 4 > window.innerHeight;
+    setMenuPos({
+      top: wouldClipBottom ? rect.top - DROPDOWN_H - 4 : rect.bottom + 4,
+      left: Math.max(8, rect.right - DROPDOWN_W),
+    });
+    setOpen(true);
+  }
 
   async function handleDelete() {
     setDeleting(true);
@@ -185,58 +171,51 @@ function RowMenu({
 
   return (
     <>
-      <div
-        ref={menuRef}
-        className="relative flex justify-center"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="flex justify-center">
         <button
-          onClick={() => setOpen((o) => !o)}
+          ref={btnRef}
+          onClick={handleToggle}
           className="w-7 h-7 flex items-center justify-center rounded text-[#3e260f] text-xs font-bold hover:bg-[rgba(62,38,15,0.08)] transition-colors"
           aria-label="Recipe options"
         >
           ···
         </button>
-
-        {open && (
-          <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-lg border border-[rgba(62,38,15,0.1)] shadow-lg py-1 z-30">
-            <button
-              onClick={() => {
-                onToggleFavorite();
-                setOpen(false);
-              }}
-              className="w-full text-left px-4 py-2 text-sm text-[#3e260f] hover:bg-[#f8f0eb] transition-colors"
-            >
-              {isFavorite ? "Remove from Favorites" : "Add to Favorites"}
-            </button>
-            <button
-              onClick={() => {
-                setOpen(false);
-                openAddMeal({ recipeId });
-              }}
-              className="w-full text-left px-4 py-2 text-sm text-[#3e260f] hover:bg-[#f8f0eb] transition-colors"
-            >
-              Add to Meal Plan
-            </button>
-            <Link
-              href={`/recipes/${recipeId}/edit`}
-              className="block px-4 py-2 text-sm text-[#3e260f] hover:bg-[#f8f0eb] transition-colors"
-              onClick={() => setOpen(false)}
-            >
-              Edit
-            </Link>
-            <button
-              onClick={() => {
-                setOpen(false);
-                setShowModal(true);
-              }}
-              className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-red-50 transition-colors"
-            >
-              Delete
-            </button>
-          </div>
-        )}
       </div>
+
+      {open && menuPos && createPortal(
+        <div
+          ref={dropdownRef}
+          className="fixed w-44 bg-white rounded-lg border border-[rgba(62,38,15,0.1)] shadow-lg py-1 z-[200]"
+          style={{ top: menuPos.top, left: menuPos.left }}
+        >
+          <button
+            onClick={() => { onToggleFavorite(); setOpen(false); }}
+            className="w-full text-left px-4 py-2 text-sm text-[#3e260f] hover:bg-[#f8f0eb] transition-colors"
+          >
+            {isFavorite ? "Remove from Favorites" : "Add to Favorites"}
+          </button>
+          <button
+            onClick={() => { setOpen(false); openAddMeal({ recipeId }); }}
+            className="w-full text-left px-4 py-2 text-sm text-[#3e260f] hover:bg-[#f8f0eb] transition-colors"
+          >
+            Add to Meal Plan
+          </button>
+          <Link
+            href={`/recipes/${recipeId}/edit`}
+            className="block px-4 py-2 text-sm text-[#3e260f] hover:bg-[#f8f0eb] transition-colors"
+            onClick={() => setOpen(false)}
+          >
+            Edit
+          </Link>
+          <button
+            onClick={() => { setOpen(false); setShowModal(true); }}
+            className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-red-50 transition-colors"
+          >
+            Delete
+          </button>
+        </div>,
+        document.body
+      )}
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
@@ -283,9 +262,7 @@ export default function RecipeTableRow({
 }) {
   const [isFavorite, setIsFavorite] = useState(recipe.is_favorite);
   const [togglingFav, setTogglingFav] = useState(false);
-  const [showImageTip, setShowImageTip] = useState(false);
   const [showIngTip, setShowIngTip] = useState(false);
-  const nameRef = useRef<HTMLAnchorElement>(null);
   const ingRef = useRef<HTMLSpanElement>(null);
 
   async function handleToggleFavorite() {
@@ -304,9 +281,7 @@ export default function RecipeTableRow({
   return (
     <>
       <tr
-        className={`border-t border-[rgba(34,34,34,0.08)] transition-colors ${
-          isFavorite ? "bg-[#f9f1eb]" : "hover:bg-[rgba(62,38,15,0.02)]"
-        }`}
+        className="border-t border-[rgba(34,34,34,0.08)] transition-colors hover:bg-[rgba(62,38,15,0.02)]"
       >
         {/* Favorite heart */}
         <td className="w-12 py-5">
@@ -315,14 +290,11 @@ export default function RecipeTableRow({
           </div>
         </td>
 
-        {/* Recipe name — hover shows cover image tooltip */}
+        {/* Recipe name */}
         <td className="py-5 pr-6">
           <Link
-            ref={nameRef}
             href={`/recipes/${recipe.id}`}
             className="font-bold text-[#b9732c] underline underline-offset-2 text-sm leading-snug hover:opacity-70 transition-opacity"
-            onMouseEnter={() => setShowImageTip(true)}
-            onMouseLeave={() => setShowImageTip(false)}
           >
             {recipe.name}
           </Link>
@@ -384,11 +356,6 @@ export default function RecipeTableRow({
       </tr>
 
       {/* Portal tooltips — escape the table DOM so they can render above everything */}
-      <ImageTooltip
-        imageUrl={recipe.image_url}
-        visible={showImageTip}
-        anchorEl={nameRef.current}
-      />
       <IngredientsTooltip
         ingredients={recipe.ingredients}
         visible={showIngTip}

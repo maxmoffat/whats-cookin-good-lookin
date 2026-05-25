@@ -74,11 +74,24 @@ export async function POST(request: Request) {
     html = resultHtml;
   }
 
-  // Extract Open Graph image before stripping the head
+  // Extract Open Graph metadata before stripping the head
   const ogImageMatch =
     html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ??
     html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
   const ogImage = ogImageMatch?.[1] ?? null;
+
+  const ogSiteNameMatch =
+    html.match(/<meta[^>]+property=["']og:site_name["'][^>]+content=["']([^"']+)["']/i) ??
+    html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:site_name["']/i);
+  // Fall back to hostname if og:site_name isn't present
+  let sourceName: string | null = ogSiteNameMatch?.[1] ?? null;
+  if (!sourceName) {
+    try {
+      sourceName = new URL(url).hostname.replace(/^www\./, "");
+    } catch {
+      sourceName = null;
+    }
+  }
 
   // Strip script/style/head tags to reduce token usage
   const stripped = html
@@ -112,6 +125,7 @@ export async function POST(request: Request) {
   try {
     const parsed = JSON.parse(cleaned);
     if (ogImage && !parsed.image_url) parsed.image_url = ogImage;
+    if (sourceName && !parsed.source_name) parsed.source_name = sourceName;
     return NextResponse.json(parsed);
   } catch {
     return NextResponse.json({ error: "parse_failed" }, { status: 422 });

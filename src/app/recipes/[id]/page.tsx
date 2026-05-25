@@ -59,9 +59,26 @@ export default async function RecipePage({
       {/* Title row */}
       <div className="flex items-start justify-between gap-4 mb-10">
         <div>
-          <h1 className="text-[32px] font-bold text-[#3e260f] leading-tight mb-3">
+          <h1 className="text-[32px] font-bold text-[#3e260f] leading-tight mb-2">
             {recipe.name}
           </h1>
+          {recipe.source_name && (
+            <p className="text-sm text-[rgba(62,38,15,0.5)] mb-3">
+              Source:{" "}
+              {recipe.source_url ? (
+                <a
+                  href={recipe.source_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#b9732c] underline underline-offset-2 hover:opacity-70 transition-opacity"
+                >
+                  {recipe.source_name}
+                </a>
+              ) : (
+                <span className="text-[rgba(62,38,15,0.7)]">{recipe.source_name}</span>
+              )}
+            </p>
+          )}
           {tags.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {tags.map((tag) => (

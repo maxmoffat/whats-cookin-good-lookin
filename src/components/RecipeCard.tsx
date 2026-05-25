@@ -76,11 +76,7 @@ export default function RecipeCard({ recipe }: { recipe: RecipeWithDetails }) {
       */}
       <div
         onClick={navigateToRecipe}
-        className={`rounded-xl cursor-pointer group relative ${
-          isFavorite
-            ? "bg-[#f9f1eb] border border-[#b9732c]"
-            : "bg-white"
-        }`}
+        className="rounded-xl cursor-pointer group relative bg-white"
       >
         {/* Cover image — overflow-hidden + rounded-t-xl kept here for image clipping only */}
         <div className="relative h-[160px] bg-stone-100 overflow-hidden rounded-t-xl">

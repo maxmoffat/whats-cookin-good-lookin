@@ -4,12 +4,16 @@ import { createContext, useContext, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
-// ─── Context ────────────────────────────────────────────────────────────────
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+const MAX_PHOTOS = 5;
+
+// ─── Context ─────────────────────────────────────────────────────────────────
 
 const Ctx = createContext<{ open: () => void }>({ open: () => {} });
 export const useAddRecipeModal = () => useContext(Ctx);
 
-// ─── Storage helper ─────────────────────────────────────────────────────────
+// ─── Storage helper ──────────────────────────────────────────────────────────
 
 async function uploadBase64ToStorage(
   base64: string,
@@ -45,7 +49,42 @@ async function uploadBase64ToStorage(
   }
 }
 
-// ─── Icons ──────────────────────────────────────────────────────────────────
+// ─── Image processing helpers ─────────────────────────────────────────────────
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => resolve(e.target!.result as string);
+    reader.readAsDataURL(file);
+  });
+}
+
+function resizeImageDataUrl(dataUrl: string): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const MAX = 1600;
+      let { width, height } = img;
+      if (width > MAX || height > MAX) {
+        if (width > height) {
+          height = Math.round((height * MAX) / width);
+          width = MAX;
+        } else {
+          width = Math.round((width * MAX) / height);
+          height = MAX;
+        }
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL("image/jpeg", 0.85));
+    };
+    img.src = dataUrl;
+  });
+}
+
+// ─── Icons ───────────────────────────────────────────────────────────────────
 
 function CameraIcon() {
   return <img src="/icons/upload-photo.svg" alt="" width={25} height={25} />;
@@ -71,41 +110,71 @@ function ImagePlaceholderIcon() {
   );
 }
 
-// ─── Modal ───────────────────────────────────────────────────────────────────
+// ─── Modal ────────────────────────────────────────────────────────────────────
 
 type Mode = "photo" | "url";
 
 function Modal({ onClose }: { onClose: () => void }) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("photo");
-  const [photo, setPhoto] = useState<File | null>(null);
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photos, setPhotos] = useState<File[]>([]);
+  const [previews, setPreviews] = useState<string[]>([]);
   const [url, setUrl] = useState("");
   const [dragging, setDragging] = useState(false);
   const [extracting, setExtracting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const addMoreInputRef = useRef<HTMLInputElement>(null);
 
   const isValid =
     mode === "photo"
-      ? !!photo
+      ? photos.length > 0
       : url.trim().length > 0 && /^https?:\/\/.+/.test(url.trim());
 
-  function handleFileSelect(file: File) {
-    if (!file.type.startsWith("image/")) return;
-    setPhoto(file);
-    setError(null);
-    const reader = new FileReader();
-    reader.onload = (e) => setPhotoPreview(e.target?.result as string);
-    reader.readAsDataURL(file);
+  // ─── Photo management ───────────────────────────────────────────────────────
+
+  function addPhotos(incoming: FileList | File[]) {
+    const validFiles = Array.from(incoming).filter((f) =>
+      f.type.startsWith("image/")
+    );
+    if (validFiles.length === 0) return;
+
+    setPhotos((prev) => {
+      const slots = MAX_PHOTOS - prev.length;
+      if (slots <= 0) return prev;
+      const toAdd = validFiles.slice(0, slots);
+      const startIdx = prev.length;
+
+      toAdd.forEach((file, i) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          setPreviews((p) => {
+            const next = [...p];
+            next[startIdx + i] = e.target?.result as string;
+            return next;
+          });
+        };
+        reader.readAsDataURL(file);
+      });
+
+      setError(null);
+      return [...prev, ...toAdd];
+    });
+  }
+
+  function removePhoto(index: number) {
+    setPhotos((prev) => prev.filter((_, i) => i !== index));
+    setPreviews((prev) => prev.filter((_, i) => i !== index));
   }
 
   function onDrop(e: React.DragEvent) {
     e.preventDefault();
     setDragging(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) handleFileSelect(file);
+    if (photos.length >= MAX_PHOTOS) return;
+    addPhotos(e.dataTransfer.files);
   }
+
+  // ─── Extraction ─────────────────────────────────────────────────────────────
 
   async function handleExtract() {
     if (!isValid || extracting) return;
@@ -113,53 +182,33 @@ function Modal({ onClose }: { onClose: () => void }) {
     setError(null);
 
     try {
-      if (mode === "photo" && photo) {
-        // Read file
-        const dataUrl = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onload = (e) => resolve(e.target!.result as string);
-          reader.readAsDataURL(photo);
-        });
+      if (mode === "photo" && photos.length > 0) {
+        // 1. Resize all photos in parallel
+        const processedImages = await Promise.all(
+          photos.map(async (photo) => {
+            const dataUrl = await readFileAsDataUrl(photo);
+            const resized = await resizeImageDataUrl(dataUrl);
+            const [header, base64] = resized.split(",");
+            const mediaType = header.match(/:(.*?);/)?.[1] ?? "image/jpeg";
+            return { base64, mediaType };
+          })
+        );
 
-        // Resize to stay under Claude's limit
-        const resizedDataUrl = await new Promise<string>((resolve) => {
-          const img = new Image();
-          img.onload = () => {
-            const MAX = 1600;
-            let { width, height } = img;
-            if (width > MAX || height > MAX) {
-              if (width > height) {
-                height = Math.round((height * MAX) / width);
-                width = MAX;
-              } else {
-                width = Math.round((width * MAX) / height);
-                height = MAX;
-              }
-            }
-            const canvas = document.createElement("canvas");
-            canvas.width = width;
-            canvas.height = height;
-            canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
-            resolve(canvas.toDataURL("image/jpeg", 0.85));
-          };
-          img.src = dataUrl;
-        });
-
-        const [header, base64] = resizedDataUrl.split(",");
-        const mediaType = header.match(/:(.*?);/)?.[1] ?? "image/jpeg";
-
-        const [res, imageUrl] = await Promise.all([
+        // 2. Extract recipe + upload all images in parallel
+        const [res, ...imageUrls] = await Promise.all([
           fetch("/api/extract/image", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ imageBase64: base64, mediaType }),
+            body: JSON.stringify({ images: processedImages }),
           }),
-          uploadBase64ToStorage(base64, mediaType),
+          ...processedImages.map((img) =>
+            uploadBase64ToStorage(img.base64, img.mediaType)
+          ),
         ]);
 
         if (!res.ok) {
           setError(
-            "Something went wrong scanning the image. Check your API key and try again."
+            "Something went wrong scanning the images. Check your API key and try again."
           );
           setExtracting(false);
           return;
@@ -167,19 +216,29 @@ function Modal({ onClose }: { onClose: () => void }) {
 
         const data = await res.json();
         if (data.error) {
-          setError("Couldn't read that image as a recipe. Try a clearer photo.");
+          setError(
+            "Couldn't read those images as a recipe. Try clearer or higher-contrast photos."
+          );
           setExtracting(false);
           return;
         }
 
+        // 3. Use Claude's chosen cover image, falling back to first
+        const coverIdx =
+          typeof data.cover_image_index === "number" &&
+          data.cover_image_index >= 0 &&
+          data.cover_image_index < imageUrls.length
+            ? data.cover_image_index
+            : 0;
+
         sessionStorage.setItem(
           "wcgl_prefill",
-          JSON.stringify({ ...data, image_url: imageUrl ?? null })
+          JSON.stringify({ ...data, image_url: imageUrls[coverIdx] ?? null })
         );
         onClose();
         router.push("/recipes/new");
       } else {
-        // URL mode
+        // URL mode (unchanged)
         const res = await fetch("/api/extract/url", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -223,6 +282,8 @@ function Modal({ onClose }: { onClose: () => void }) {
     }
   }
 
+  // ─── Render ──────────────────────────────────────────────────────────────────
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
       {/* Backdrop */}
@@ -264,10 +325,7 @@ function Modal({ onClose }: { onClose: () => void }) {
         <div className="grid grid-cols-2 gap-5 mb-8">
           {/* Photo card */}
           <button
-            onClick={() => {
-              setMode("photo");
-              setError(null);
-            }}
+            onClick={() => { setMode("photo"); setError(null); }}
             className={`text-left rounded-[8px] px-6 py-5 border transition-colors ${
               mode === "photo"
                 ? "bg-[rgba(185,115,44,0.1)] border-[#b9732c]"
@@ -281,17 +339,14 @@ function Modal({ onClose }: { onClose: () => void }) {
               </span>
             </div>
             <p className="text-xs text-[#3e260f] leading-[20px] max-w-[310px]">
-              Attach a cookbook photo, recipe card or screenshot below in JPG or
-              PNG format
+              Upload up to 5 cookbook pages, recipe cards or screenshots in JPG,
+              PNG or WEBP format
             </p>
           </button>
 
           {/* URL card */}
           <button
-            onClick={() => {
-              setMode("url");
-              setError(null);
-            }}
+            onClick={() => { setMode("url"); setError(null); }}
             className={`text-left rounded-[8px] px-6 py-5 border transition-colors ${
               mode === "url"
                 ? "bg-[rgba(185,115,44,0.1)] border-[#b9732c]"
@@ -318,63 +373,134 @@ function Modal({ onClose }: { onClose: () => void }) {
         {extracting ? (
           <div className="h-[200px] rounded-[8px] border border-[rgba(62,38,15,0.1)] flex flex-col items-center justify-center gap-4">
             <div className="w-8 h-8 border-[3px] border-[#b9732c] border-t-transparent rounded-full animate-spin" />
-            <p className="text-sm text-[#3e260f]">Extracting recipe…</p>
+            <p className="text-sm text-[#3e260f]">
+              Extracting recipe{photos.length > 1 ? " from all pages" : ""}…
+            </p>
           </div>
         ) : mode === "photo" ? (
-          <label className="block cursor-pointer">
-            <div
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragging(true);
-              }}
-              onDragLeave={() => setDragging(false)}
-              onDrop={onDrop}
-              className={`h-[200px] rounded-[8px] border-2 border-dashed flex flex-col items-center justify-center gap-3 transition-colors ${
-                dragging
-                  ? "border-[#b9732c] bg-[rgba(185,115,44,0.05)]"
-                  : photo
-                  ? "border-[#b9732c]"
-                  : "border-[rgba(62,38,15,0.25)] hover:border-[rgba(62,38,15,0.4)]"
-              }`}
-            >
-              {photo && photoPreview ? (
-                <>
-                  <img
-                    src={photoPreview}
-                    className="h-20 w-auto rounded object-contain"
-                    alt="preview"
-                  />
-                  <p className="text-sm font-medium text-[#3e260f]">
-                    {photo.name}
-                  </p>
-                  <p className="text-xs text-[rgba(62,38,15,0.5)]">
-                    Click to change
-                  </p>
-                </>
-              ) : (
-                <>
+          <div>
+            {photos.length === 0 ? (
+              /* ── Empty drop zone ── */
+              <label className="block cursor-pointer">
+                <div
+                  onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+                  onDragLeave={() => setDragging(false)}
+                  onDrop={onDrop}
+                  className={`h-[200px] rounded-[8px] border-2 border-dashed flex flex-col items-center justify-center gap-3 transition-colors ${
+                    dragging
+                      ? "border-[#b9732c] bg-[rgba(185,115,44,0.05)]"
+                      : "border-[rgba(62,38,15,0.25)] hover:border-[rgba(62,38,15,0.4)]"
+                  }`}
+                >
                   <ImagePlaceholderIcon />
-                  <p className="text-sm text-[#3e260f]">
-                    Drag and drop your recipe photo here or{" "}
+                  <p className="text-sm text-[#3e260f] text-center">
+                    Drag and drop your recipe photos here or{" "}
                     <span className="text-[#b9732c] underline underline-offset-2">
                       browse your computer
                     </span>
                   </p>
-                </>
-              )}
-            </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              className="sr-only"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) handleFileSelect(f);
-              }}
-            />
-          </label>
+                  <p className="text-xs text-[rgba(62,38,15,0.4)]">
+                    Up to {MAX_PHOTOS} photos — JPG, PNG, WEBP
+                  </p>
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  multiple
+                  className="sr-only"
+                  onChange={(e) => {
+                    if (e.target.files) addPhotos(e.target.files);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+            ) : (
+              /* ── Thumbnail grid ── */
+              <div
+                onDragOver={(e) => {
+                  if (photos.length < MAX_PHOTOS) { e.preventDefault(); setDragging(true); }
+                }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={onDrop}
+                className={`rounded-[8px] border-2 border-dashed p-4 transition-colors ${
+                  dragging && photos.length < MAX_PHOTOS
+                    ? "border-[#b9732c] bg-[rgba(185,115,44,0.05)]"
+                    : "border-[rgba(62,38,15,0.15)]"
+                }`}
+              >
+                <div className="grid grid-cols-5 gap-2">
+                  {photos.map((photo, i) => (
+                    <div
+                      key={i}
+                      className="relative aspect-[4/3] group/thumb rounded-[6px] overflow-hidden bg-[rgba(62,38,15,0.04)]"
+                    >
+                      {previews[i] ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={previews[i]}
+                          alt={photo.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <div className="w-4 h-4 border-2 border-[#b9732c] border-t-transparent rounded-full animate-spin" />
+                        </div>
+                      )}
+
+                      {/* Remove button */}
+                      <button
+                        type="button"
+                        onClick={() => removePhoto(i)}
+                        className="absolute top-1 right-1 w-5 h-5 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-opacity"
+                        aria-label={`Remove photo ${i + 1}`}
+                      >
+                        <svg width="7" height="7" viewBox="0 0 7 7" fill="none">
+                          <path d="M1 1l5 5M6 1L1 6" stroke="white" strokeWidth="1.2" strokeLinecap="round" />
+                        </svg>
+                      </button>
+
+                      {/* Page label */}
+                      <span className="absolute bottom-1 left-1 text-[9px] bg-black/50 text-white px-1.5 py-0.5 rounded leading-none">
+                        {i + 1}
+                      </span>
+                    </div>
+                  ))}
+
+                  {/* Add more slot */}
+                  {photos.length < MAX_PHOTOS && (
+                    <label className="aspect-[4/3] rounded-[6px] border-2 border-dashed border-[rgba(62,38,15,0.2)] flex flex-col items-center justify-center gap-1 cursor-pointer hover:border-[#b9732c] hover:bg-[rgba(185,115,44,0.04)] transition-colors">
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <path d="M8 1v14M1 8h14" stroke="#b9732c" strokeWidth="1.5" strokeLinecap="round" />
+                      </svg>
+                      <span className="text-[10px] text-[rgba(62,38,15,0.5)]">Add</span>
+                      <input
+                        ref={addMoreInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        multiple
+                        className="sr-only"
+                        onChange={(e) => {
+                          if (e.target.files) addPhotos(e.target.files);
+                          e.target.value = "";
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
+
+                <p className="text-xs text-[rgba(62,38,15,0.4)] mt-3">
+                  {photos.length}/{MAX_PHOTOS} photo{photos.length !== 1 ? "s" : ""}
+                  {photos.length < MAX_PHOTOS
+                    ? " — drag more here or click + to add"
+                    : " — maximum reached"}
+                  {photos.length > 1 ? " · Best photo automatically selected as cover" : ""}
+                </p>
+              </div>
+            )}
+          </div>
         ) : (
+          /* ── URL mode ── */
           <div className="space-y-2">
             <label className="block text-sm font-semibold text-[#3e260f]">
               Paste Recipe URL
@@ -382,13 +508,8 @@ function Modal({ onClose }: { onClose: () => void }) {
             <input
               type="url"
               value={url}
-              onChange={(e) => {
-                setUrl(e.target.value);
-                setError(null);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && isValid) handleExtract();
-              }}
+              onChange={(e) => { setUrl(e.target.value); setError(null); }}
+              onKeyDown={(e) => { if (e.key === "Enter" && isValid) handleExtract(); }}
               placeholder="https://www.example-recipe.com/grilled-chicken-salad"
               className="w-full h-10 rounded-[8px] border border-[rgba(62,38,15,0.2)] bg-white px-4 text-sm text-[#3e260f] placeholder:text-[rgba(62,38,15,0.3)] focus:border-[#b9732c] focus:outline-none focus:ring-1 focus:ring-[#b9732c]"
             />
@@ -423,7 +544,7 @@ function Modal({ onClose }: { onClose: () => void }) {
   );
 }
 
-// ─── Provider ────────────────────────────────────────────────────────────────
+// ─── Provider ─────────────────────────────────────────────────────────────────
 
 export function AddRecipeModalProvider({
   children,

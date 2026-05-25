@@ -1,7 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 
-const PROMPT = `You are extracting structured recipe data from an image of a recipe (cookbook page, handwritten card, printed sheet, etc.).
+const PROMPT = `You are extracting structured recipe data from one or more images of a recipe (cookbook pages, handwritten cards, printed sheets, screenshots, etc.).
+
+When multiple images are provided they may show different pages or sections of the same recipe — combine all information from all images into a single, complete recipe.
 
 Extract the following and return ONLY valid JSON matching this exact schema — no markdown, no explanation:
 
@@ -19,28 +21,49 @@ Extract the following and return ONLY valid JSON matching this exact schema — 
       "name": "string (ingredient name, e.g. 'all-purpose flour')"
     }
   ],
-  "confidence": "high" | "medium" | "low"
+  "confidence": "high" | "medium" | "low",
+  "cover_image_index": number (0-based index of the image that best represents the finished dish — prefer plated or completed-dish photos over in-progress shots, ingredient spreads, or text-only pages; use 0 if uncertain or only one image is provided)
 }
 
 Rules:
 - If a field isn't visible or legible, use null — never guess
 - Split quantity and unit from the ingredient name
-- If the image doesn't contain a recipe, return { "error": "not_a_recipe" }
+- If none of the images contain a recipe, return { "error": "not_a_recipe" }
 - If text is partially illegible, still extract what you can and set confidence to "low"`;
 
 export async function POST(request: Request) {
-  const { imageBase64, mediaType } = await request.json();
+  const body = await request.json();
 
-  if (!imageBase64 || !mediaType) {
+  // Support both legacy single-image { imageBase64, mediaType } and new multi-image { images: [...] }
+  let images: Array<{ base64: string; mediaType: string }>;
+
+  if (body.images && Array.isArray(body.images)) {
+    images = body.images;
+  } else if (body.imageBase64 && body.mediaType) {
+    images = [{ base64: body.imageBase64, mediaType: body.mediaType }];
+  } else {
     return NextResponse.json({ error: "missing_fields" }, { status: 400 });
   }
 
   const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
-  if (!validTypes.includes(mediaType)) {
-    return NextResponse.json({ error: "invalid_media_type" }, { status: 400 });
+  for (const img of images) {
+    if (!validTypes.includes(img.mediaType)) {
+      return NextResponse.json({ error: "invalid_media_type" }, { status: 400 });
+    }
   }
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+  // Build content array: all images first, then the prompt
+  const imageContent = images.map((img) => ({
+    type: "image" as const,
+    source: {
+      type: "base64" as const,
+      media_type: img.mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+      data: img.base64,
+    },
+  }));
+
   let raw: string;
   try {
     const response = await client.messages.create({
@@ -50,14 +73,7 @@ export async function POST(request: Request) {
         {
           role: "user",
           content: [
-            {
-              type: "image",
-              source: {
-                type: "base64",
-                media_type: mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
-                data: imageBase64,
-              },
-            },
+            ...imageContent,
             { type: "text", text: PROMPT },
           ],
         },
