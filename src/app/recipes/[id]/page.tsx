@@ -3,6 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import RecipeActions from "./RecipeActions";
+import RecipeNotes from "@/components/RecipeNotes";
+import type { RecipeNote } from "@/lib/supabase/types";
 
 function formatTime(minutes: number | null): string {
   if (!minutes) return "—";
@@ -31,6 +33,13 @@ export default async function RecipePage({
     .single();
 
   if (!data) notFound();
+
+  const { data: notesData } = await supabase
+    .from("recipe_notes")
+    .select("*")
+    .eq("recipe_id", id)
+    .order("created_at", { ascending: false });
+  const initialNotes = (notesData ?? []) as RecipeNote[];
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recipe = data as any;
@@ -178,12 +187,7 @@ export default async function RecipePage({
           )}
 
           {/* Notes */}
-          <section id="notes">
-            <h2 className="text-xl font-bold text-[#3e260f] mb-4">Notes</h2>
-            <p className="text-base text-[rgba(62,38,15,0.25)] leading-[32px]">
-              No notes added yet for this recipe.
-            </p>
-          </section>
+          <RecipeNotes recipeId={id} initialNotes={initialNotes} />
 
         </div>
       </div>

@@ -619,12 +619,12 @@ function ViewDropdown({
 export default function MealPlanClient() {
   const now = new Date();
 
-  // View — persisted in localStorage, default "week"
-  const [view, setView] = useState<CalView>(() => {
-    if (typeof window === "undefined") return "week";
+  // View — always start as "week" to match SSR, then sync from localStorage after mount
+  const [view, setView] = useState<CalView>("week");
+  useEffect(() => {
     const stored = localStorage.getItem(LS_VIEW_KEY);
-    return stored === "month" ? "month" : "week";
-  });
+    if (stored === "month") setView("month");
+  }, []);
 
   // Week navigation
   const [weekOffset, setWeekOffset] = useState(0);
