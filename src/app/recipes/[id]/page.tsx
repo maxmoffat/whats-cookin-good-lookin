@@ -63,14 +63,14 @@ export default async function RecipePage({
             {recipe.name}
           </h1>
           {recipe.source_name && (
-            <p className="text-sm text-[rgba(62,38,15,0.5)] mb-3">
+            <p className="text-sm text-[rgba(62,38,15,0.5)] mb-6">
               Source:{" "}
               {recipe.source_url ? (
                 <a
                   href={recipe.source_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-[#b9732c] underline underline-offset-2 hover:opacity-70 transition-opacity"
+                  className="underline underline-offset-2 hover:opacity-70 transition-opacity"
                 >
                   {recipe.source_name}
                 </a>
